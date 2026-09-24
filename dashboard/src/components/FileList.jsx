@@ -104,16 +104,25 @@ export default function FileList({ refreshKey, onTriggerUpload }) {
         toast.success(`Direct download of "${file.filename}" complete!`, { duration: 3000 });
       }
     } catch (err) {
-      const data = err.response?.data;
-      const errorMessage = data?.reason || data?.error || err.message;
+      const parsed = err.parsedData || err.response?.data;
+      const errorTitle = parsed?.error || 'Download Not Possible';
+      const reason = parsed?.reason || err.message;
+      const missing = parsed?.missing || [];
+      const available = parsed?.available;
+      const required = parsed?.required;
+
       setDownloadState({
         status: 'error',
         reconstructed: false,
         missingShards: 0,
         recoveredShards: 0,
-        error: errorMessage,
+        errorTitle,
+        reason,
+        missingNodes: missing,
+        availableNodes: available,
+        requiredNodes: required,
       });
-      toast.error(`Download failed: ${errorMessage}`, { duration: 5000 });
+      toast.error(reason || errorTitle, { duration: 6000 });
     }
   };
 

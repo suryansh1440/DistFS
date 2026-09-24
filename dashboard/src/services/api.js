@@ -27,27 +27,40 @@ export const getFile = (id) => api.get(`/files/${id}`);
 export const deleteFile = (id) => api.delete(`/files/${id}`);
 
 export const downloadFile = async (id, filename) => {
-  const response = await api.get(`/files/${id}/download`, {
-    responseType: 'blob',
-  });
+  try {
+    const response = await api.get(`/files/${id}/download`, {
+      responseType: 'blob',
+    });
 
-  // Get reconstruction information from headers
-  const reconstructed = response.headers['x-reconstructed'] === 'true';
-  const missingShards = parseInt(response.headers['x-missing-shards'] || '0', 10);
-  const recoveredShards = parseInt(response.headers['x-recovered-shards'] || '0', 10);
+    // Get reconstruction information from headers
+    const reconstructed = response.headers['x-reconstructed'] === 'true';
+    const missingShards = parseInt(response.headers['x-missing-shards'] || '0', 10);
+    const recoveredShards = parseInt(response.headers['x-recovered-shards'] || '0', 10);
 
-  // Trigger browser download
-  const blob = new Blob([response.data], { type: 'application/octet-stream' });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', filename);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
+    // Trigger browser download
+    const blob = new Blob([response.data], { type: 'application/octet-stream' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
 
-  return { reconstructed, missingShards, recoveredShards };
+    return { reconstructed, missingShards, recoveredShards };
+  } catch (err) {
+    if (err.response?.data instanceof Blob) {
+      try {
+        const text = await err.response.data.text();
+        const json = JSON.parse(text);
+        err.parsedData = json;
+      } catch {
+        // Not a JSON blob
+      }
+    }
+    throw err;
+  }
 };
 
 // ─── Nodes ─────────────────────────────────
