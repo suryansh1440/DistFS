@@ -1,0 +1,33 @@
+# Build stage
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /app
+
+# Copy proto module dependency
+COPY proto/ /proto/
+
+# Copy storage-node module definition
+COPY storage-node/go.mod storage-node/go.sum ./
+RUN go mod download
+
+# Copy storage-node source
+COPY storage-node/ .
+
+# Build static Linux binary
+RUN CGO_ENABLED=0 GOOS=linux go build -o /storage-node ./cmd/node
+
+# Run stage
+FROM alpine:3.19
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+COPY --from=builder /storage-node .
+
+# Create directory where shards will be persisted
+RUN mkdir -p /data/shards
+
+EXPOSE 50051
+
+CMD ["./storage-node"]

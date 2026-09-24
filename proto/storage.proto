@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package storage;
+
+// Shared Go package — both coordinator and storage-node import from here.
+option go_package = "github.com/surya/dist-file-storage/proto/gen/storagepb";
+
+// ══════════════════════════════════════════════════════════════════
+// StorageNode Service
+// ══════════════════════════════════════════════════════════════════
+// Runs on each of the 4 storage nodes.
+// The coordinator (gRPC client) calls these RPCs to manage shards.
+// Nodes are intentionally "dumb" — they just store/return bytes.
+// All decision-making happens in the coordinator.
+
+service StorageNode {
+
+    // Store a shard on this node (client-streaming for large shards).
+    rpc StoreShard(stream StoreShardRequest) returns (StoreShardResponse);
+
+    // Retrieve a shard from this node (server-streaming for large shards).
+    rpc RetrieveShard(RetrieveShardRequest) returns (stream RetrieveShardResponse);
+
+    // Delete a single shard from this node.
+    rpc DeleteShard(DeleteShardRequest) returns (DeleteShardResponse);
+
+    // Delete ALL shards belonging to a file from this node.
+    rpc DeleteFileShards(DeleteFileShardsRequest) returns (DeleteFileShardsResponse);
+
+    // Health check — coordinator pings each node for status + storage usage.
+    rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// ─── StoreShard Messages ───────────────────────────────────────
+
+// Client-streaming request: first message = metadata, subsequent = raw bytes.
+message StoreShardRequest {
+    oneof payload {
+        ShardMetadata metadata = 1;   // Sent first: identifies the shard
+        bytes data = 2;               // Sent next: raw shard data in 64KB chunks
+    }
+}
+
+// Metadata sent before shard data — tells the node what it's receiving.
+message ShardMetadata {
+    string file_id = 1;              // UUID of the parent file
+    string chunk_id = 2;             // UUID of the parent chunk
+    int32 shard_index = 3;           // 0..3 (data: 0-2, parity: 3)
+    string shard_type = 4;           // "DATA" or "PARITY"
+    string checksum = 5;             // SHA-256 hex digest for integrity check
+    int64 size = 6;                  // Total shard size in bytes
+}
+
+message StoreShardResponse {
+    bool success = 1;
+    string message = 2;
+    string shard_id = 3;             // Node-assigned identifier
+}
+
+// ─── RetrieveShard Messages ────────────────────────────────────
+
+message RetrieveShardRequest {
+    string file_id = 1;
+    string chunk_id = 2;
+    int32 shard_index = 3;
+}
+
+// Server streams shard data back in 64KB chunks.
+message RetrieveShardResponse {
+    bytes data = 1;
+}
+
+// ─── DeleteShard Messages ──────────────────────────────────────
+
+message DeleteShardRequest {
+    string file_id = 1;
+    string chunk_id = 2;
+    int32 shard_index = 3;
+}
+
+message DeleteShardResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// ─── DeleteFileShards Messages ─────────────────────────────────
+
+message DeleteFileShardsRequest {
+    string file_id = 1;
+}
+
+message DeleteFileShardsResponse {
+    bool success = 1;
+    string message = 2;
+    int32 shards_deleted = 3;
+}
+
+// ─── HealthCheck Messages ──────────────────────────────────────
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+    bool healthy = 1;
+    string node_id = 2;
+    int64 total_storage = 3;         // Total capacity in bytes
+    int64 used_storage = 4;          // Consumed bytes
+    int64 shard_count = 5;           // Number of shard files on disk
+}

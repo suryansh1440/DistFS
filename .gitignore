@@ -1,0 +1,63 @@
+# ══════════════════════════════════════════════════════════
+# DistFS — Git Ignore Configuration
+# ══════════════════════════════════════════════════════════
+
+# ─── Environment & Secrets ──────────────────────────────
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ─── Go Binaries & Build Output ─────────────────────────
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coordinator/coordinator
+storage-node/storage-node
+bin/
+
+# ─── Node & React / Vite (dashboard) ────────────────────
+dashboard/node_modules/
+node_modules/
+dashboard/dist/
+dist/
+dashboard/.vite/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ─── Storage Nodes Local Data & Shards ──────────────────
+/data/
+/data/shards/
+shards/
+*.shard
+*.tmp
+*.temp
+
+# ─── Test Outputs & Temp Artifacts ──────────────────────
+test/*.bin
+test/*.tmp
+test/downloaded_*
+test_*.bin
+test_file*
+sample_downloaded*
+
+# ─── OS & IDE Files ─────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── Docker Overrides ───────────────────────────────────
+docker-compose.override.yml

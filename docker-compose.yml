@@ -1,0 +1,144 @@
+services:
+  # ─── PostgreSQL 16 ───────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: distfs-postgres
+    environment:
+      POSTGRES_USER: distfs
+      POSTGRES_PASSWORD: distfs_secret
+      POSTGRES_DB: distfs
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U distfs"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - distfs-network
+
+  # ─── Storage Node 1 ─────────────────────────────────
+  storage-node-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.storage-node
+    container_name: distfs-node-1
+    environment:
+      NODE_ID: node-1
+      GRPC_PORT: "50051"
+      DATA_DIR: /data/shards
+    ports:
+      - "50051:50051"
+    volumes:
+      - node1_data:/data/shards
+    networks:
+      - distfs-network
+
+  # ─── Storage Node 2 ─────────────────────────────────
+  storage-node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.storage-node
+    container_name: distfs-node-2
+    environment:
+      NODE_ID: node-2
+      GRPC_PORT: "50052"
+      DATA_DIR: /data/shards
+    ports:
+      - "50052:50052"
+    volumes:
+      - node2_data:/data/shards
+    networks:
+      - distfs-network
+
+  # ─── Storage Node 3 ─────────────────────────────────
+  storage-node-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.storage-node
+    container_name: distfs-node-3
+    environment:
+      NODE_ID: node-3
+      GRPC_PORT: "50053"
+      DATA_DIR: /data/shards
+    ports:
+      - "50053:50053"
+    volumes:
+      - node3_data:/data/shards
+    networks:
+      - distfs-network
+
+  # ─── Storage Node 4 ─────────────────────────────────
+  storage-node-4:
+    build:
+      context: .
+      dockerfile: Dockerfile.storage-node
+    container_name: distfs-node-4
+    environment:
+      NODE_ID: node-4
+      GRPC_PORT: "50054"
+      DATA_DIR: /data/shards
+    ports:
+      - "50054:50054"
+    volumes:
+      - node4_data:/data/shards
+    networks:
+      - distfs-network
+
+  # ─── Go Coordinator ─────────────────────────────────
+  coordinator:
+    build:
+      context: .
+      dockerfile: Dockerfile.coordinator
+    container_name: distfs-coordinator
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: distfs
+      POSTGRES_PASSWORD: distfs_secret
+      POSTGRES_DB: distfs
+      COORDINATOR_PORT: "8080"
+      CHUNK_SIZE: "4194304"
+      DATA_SHARDS: "3"
+      PARITY_SHARDS: "1"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      storage-node-1:
+        condition: service_started
+      storage-node-2:
+        condition: service_started
+      storage-node-3:
+        condition: service_started
+      storage-node-4:
+        condition: service_started
+    networks:
+      - distfs-network
+
+  # ─── React Dashboard ────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: distfs-dashboard
+    ports:
+      - "5173:5173"
+    depends_on:
+      - coordinator
+    networks:
+      - distfs-network
+
+volumes:
+  postgres_data:
+  node1_data:
+  node2_data:
+  node3_data:
+  node4_data:
+
+networks:
+  distfs-network:
+    driver: bridge
