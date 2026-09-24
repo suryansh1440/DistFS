@@ -233,12 +233,12 @@ export default function FileList({ refreshKey, onTriggerUpload }) {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/40 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                <th className="py-2.5 px-4">Filename</th>
-                <th className="py-2.5 px-4">Size</th>
-                <th className="py-2.5 px-4 hidden lg:table-cell">Uploaded</th>
-                <th className="py-2.5 px-4">Status</th>
-                <th className="py-2.5 px-4 hidden md:table-cell">SHA-256</th>
-                <th className="py-2.5 px-4 text-right">Actions</th>
+                <th className="py-2.5 px-3">Filename</th>
+                <th className="py-2.5 px-3">Size</th>
+                <th className="py-2.5 px-3 hidden xl:table-cell">Uploaded</th>
+                <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3 hidden 2xl:table-cell">SHA-256</th>
+                <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

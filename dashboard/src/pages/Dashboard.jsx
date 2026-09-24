@@ -39,9 +39,9 @@ export default function Dashboard({ onNavigate }) {
       <ClusterStats refreshKey={refreshKey} />
 
       {/* 60 / 40 Main Content Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Side: 60% — Your Files */}
-        <div className="lg:col-span-7 xl:col-span-7">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Left Side: Your Files */}
+        <div className="lg:col-span-7 xl:col-span-8">
           <FileList
             refreshKey={refreshKey}
             onTriggerUpload={() => {
@@ -50,8 +50,8 @@ export default function Dashboard({ onNavigate }) {
           />
         </div>
 
-        {/* Right Side: 40% — Upload File */}
-        <div className="lg:col-span-5 xl:col-span-5 sticky top-20">
+        {/* Right Side: Upload File */}
+        <div className="lg:col-span-5 xl:col-span-4 sticky top-20">
           <FileUpload onUploadComplete={handleUploadComplete} />
         </div>
       </div>

@@ -69,7 +69,7 @@ export default function App() {
       <Navbar currentRoute={currentRoute} onNavigate={handleNavigate} />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-[1536px] w-full mx-auto px-3 sm:px-5 lg:px-6 py-6">
         {currentRoute === '/files' ? (
           <Files onNavigate={handleNavigate} />
         ) : currentRoute === '/simulator' ? (
@@ -80,8 +80,8 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <footer className="border-t border-slate-200 bg-white py-5 text-center text-xs text-slate-400">
+        <div className="max-w-[1536px] mx-auto px-3 sm:px-5 lg:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p>DistFS &bull; Distributed Storage Architecture Simulation</p>
           <p className="font-mono text-[11px] text-slate-400">Reed-Solomon RS(3, 1) &bull; gRPC Streaming &bull; PostgreSQL 16</p>
         </div>
