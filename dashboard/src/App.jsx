@@ -2,13 +2,12 @@ import { useState, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
-import Files from './pages/Files';
 import Simulator from './pages/Simulator';
 
 export default function App() {
   const [currentRoute, setCurrentRoute] = useState(() => {
     const path = window.location.pathname;
-    if (path === '/files' || path === '/simulator') {
+    if (path === '/simulator') {
       return path;
     }
     return '/dashboard';
@@ -18,7 +17,7 @@ export default function App() {
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
-      if (path === '/files' || path === '/simulator') {
+      if (path === '/simulator') {
         setCurrentRoute(path);
       } else {
         setCurrentRoute('/dashboard');
@@ -70,9 +69,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-[1536px] w-full mx-auto px-3 sm:px-5 lg:px-6 py-6">
-        {currentRoute === '/files' ? (
-          <Files onNavigate={handleNavigate} />
-        ) : currentRoute === '/simulator' ? (
+        {currentRoute === '/simulator' ? (
           <Simulator />
         ) : (
           <Dashboard onNavigate={handleNavigate} />

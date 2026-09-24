@@ -6,7 +6,6 @@ export default function Navbar({ currentRoute, onNavigate }) {
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard' },
-    { label: 'Files', path: '/files' },
     { label: 'Simulator', path: '/simulator' },
   ];
 
