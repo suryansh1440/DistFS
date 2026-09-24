@@ -13,11 +13,10 @@ func SetupRouter(sm *shardmanager.ShardManager, enc *erasure.Encoder) *gin.Engin
 
 	// CORS configuration for React dashboard
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"},
+		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept"},
 		ExposeHeaders:    []string{"Content-Disposition", "X-Original-Checksum", "X-Reconstructed-Checksum", "X-Reconstructed", "X-Missing-Shards", "X-Recovered-Shards"},
-		AllowCredentials: true,
 	}))
 
 	handler := NewHandler(sm, enc)
