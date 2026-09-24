@@ -1,194 +1,272 @@
-# Distributed File Storage Cluster with Reed-Solomon Erasure Coding
+# DistFS
 
-A robust distributed file storage system that splits and chunks files across 4 storage nodes with parity shards, ensuring complete data reconstruction upon simulated node failure with zero data loss.
+Distributed file storage with a Go coordinator, four gRPC storage nodes, PostgreSQL metadata, and Reed-Solomon erasure coding.
 
----
+Each file is split into 4 MB chunks. Every chunk is encoded as three data shards and one parity shard (`3 + 1`), so the cluster can reconstruct a file when one storage node is unavailable.
 
-## 🏛️ Architecture Overview
+## Architecture
 
+```mermaid
+flowchart LR
+    Browser[Browser]
+    Dashboard[React Dashboard\nVite :5173]
+    Coordinator[Go Coordinator\nREST API :8080]
+    Database[(PostgreSQL 16\nMetadata only)]
+    Node1[Storage Node 1\ngRPC :50051\nData shard 0]
+    Node2[Storage Node 2\ngRPC :50052\nData shard 1]
+    Node3[Storage Node 3\ngRPC :50053\nData shard 2]
+    Node4[Storage Node 4\ngRPC :50054\nParity shard 3]
+
+    Browser --> Dashboard
+    Dashboard -->|HTTP JSON, multipart, binary| Coordinator
+    Coordinator --> Database
+    Coordinator -->|gRPC streaming| Node1
+    Coordinator -->|gRPC streaming| Node2
+    Coordinator -->|gRPC streaming| Node3
+    Coordinator -->|gRPC streaming| Node4
 ```
-User (Browser)
-      │
-      ▼
-┌────────────────────────┐
-│ React + Vite Dashboard │ (Port 5173 - Dark Mode, Live Simulation Controls)
-└───────────┬────────────┘
-            │ REST API (JSON / Multipart / Binary)
-            ▼
-┌────────────────────────┐
-│     Go Coordinator     │ (Port 8080 - Chunking, RS 3+1, Orchestration)
-└───────┬────────┬───────┘
-        │        │
-  PostgreSQL 16  │ gRPC Streaming (Client / Server)
-(Metadata only)  │
-                 ├──► Storage Node 1 (Port 50051 - Data Shard 0)
-                 ├──► Storage Node 2 (Port 50052 - Data Shard 1)
-                 ├──► Storage Node 3 (Port 50053 - Data Shard 2)
-                 └──► Storage Node 4 (Port 50054 - Parity Shard 3)
+
+PostgreSQL stores metadata only. The raw shard files live on the storage-node data volumes.
+
+### Upload flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Dashboard
+    participant API as Coordinator
+    participant DB as PostgreSQL
+    participant Nodes as Storage nodes
+
+    User->>UI: Select a file
+    UI->>API: POST /api/files/upload
+    API->>API: SHA-256 checksum
+    API->>API: Split into 4 MB chunks
+    API->>API: Encode each chunk as 3 data + 1 parity shard
+    par Store shards
+        API->>Nodes: Stream shard 0
+        API->>Nodes: Stream shard 1
+        API->>Nodes: Stream shard 2
+        API->>Nodes: Stream parity shard
+    end
+    API->>DB: Save file, chunk, and shard metadata
+    API-->>UI: Upload result
 ```
 
-### Technology Stack
-- **Go 1.22+**: Core coordinator backend and storage node microservices.
-- **gRPC / Protocol Buffers (proto3)**: High-throughput chunk streaming between coordinator and storage nodes.
-- **Reed-Solomon Erasure Coding (`klauspost/reedsolomon`)**: 3 Data Shards + 1 Parity Shard ($K=3, M=1$).
-- **PostgreSQL 16**: Metadata storage for files, chunks, shards, and node health. Shard raw binaries reside exclusively on node disks.
-- **React 18 + Vite + Tailwind CSS**: Real-time simulation dashboard with node start/stop controls.
-- **Docker Compose**: Containerized multi-service orchestration.
+### Download and reconstruction flow
 
----
+```mermaid
+flowchart TD
+    Request[Download request] --> Check{How many nodes are online?}
+    Check -->|4 online| Direct[Read all shards]
+    Check -->|3 online| Recover[Read available shards\nand reconstruct the missing shard]
+    Check -->|2 or fewer online| Reject[Reject with HTTP 503]
+    Direct --> Assemble[Reassemble chunks]
+    Recover --> Assemble
+    Assemble --> Verify{SHA-256 matches?}
+    Verify -->|Yes| Download[Return file]
+    Verify -->|No| IntegrityError[Abort download]
+```
 
-## 🚀 Quick Start
+## Technology
+
+- Go 1.22+
+- Gin REST API
+- gRPC and Protocol Buffers
+- Reed-Solomon erasure coding (`3` data shards + `1` parity shard)
+- PostgreSQL 16
+- React 18, Vite, and Tailwind CSS
+- Docker Compose
+
+## Run Locally with Docker Compose
 
 ### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
-- *Optional (for local development without Docker)*: Go 1.22+, Node.js 20+, PostgreSQL 16
 
-### Run with Docker Compose
+- [Docker Desktop](https://docs.docker.com/get-docker/)
+- Git
 
-1. Clone or navigate to the repository directory:
-   ```bash
-   cd Dist_File_Storeage
-   ```
+### Start the cluster
 
-2. Start the entire cluster with Docker Compose:
-   ```bash
-   docker-compose up --build -d
-   ```
+From the repository root:
 
-3. Verify all 7 containers are healthy and running:
-   ```bash
-   docker-compose ps
-   ```
+```powershell
+git clone https://github.com/abhinavtiwari77/DistFS.git
+cd DistFS
+docker compose up --build -d
+```
 
-4. Open the simulation dashboard in your browser:
-   ```
-   http://localhost:5173
-   ```
+This starts seven services:
 
----
+- `postgres`
+- `storage-node-1`
+- `storage-node-2`
+- `storage-node-3`
+- `storage-node-4`
+- `coordinator`
+- `dashboard`
 
-## ⚙️ How It Works
+Open the dashboard at [http://localhost:5173](http://localhost:5173).
 
-### 1. Upload Flow
-1. User uploads a file through the dashboard or `POST /api/files/upload`.
-2. Coordinator calculates the original file's **SHA-256** checksum.
-3. The file is split into fixed-size **4MB chunks**.
-4. Each chunk is Reed-Solomon encoded into **3 data shards + 1 parity shard**.
-5. Shards are streamed to the 4 storage nodes via gRPC and stored on disk with checksum verification.
-6. Shard and file metadata are saved in PostgreSQL; the file is marked `HEALTHY`.
+Check the services and API health:
 
-### 2. Download & Failsafe Reconstruction Flow
-1. User requests a download (`GET /api/files/:id/download`).
-2. **Preflight Check**: Coordinator verifies online storage nodes.
-   - If all nodes are **ONLINE**: Shards are fetched and assembled directly.
-   - If 1 node is **OFFLINE**: Coordinator fetches available shards (2 data + 1 parity) and uses **Reed-Solomon decoding** to mathematically reconstruct the missing shard.
-   - If &ge; 2 nodes are **OFFLINE**: Failsafe triggers and rejects the download with **HTTP 503 Service Unavailable** (insufficient shards to guarantee reconstruction).
-3. **Integrity Validation**: Reconstructed file SHA-256 is checked against the original checksum stored in PostgreSQL.
-4. If valid, the file is delivered to the user with `X-Reconstructed: true` and recovery headers. If invalid, the download is aborted to prevent data corruption.
+```powershell
+docker compose ps
+curl http://localhost:8080/api/health
+```
 
-### 3. Failure Simulation
-- Each node card in the dashboard features a **Stop / Start** toggle.
-- Simulating a node stop marks it `OFFLINE` in the database, mimicking hardware, power, or network loss.
-- Stopping 1 node demonstrates transparent Reed-Solomon reconstruction.
-- Stopping 2 nodes showcases the failsafe mechanism preventing corrupted downloads.
+The coordinator runs the SQL migrations automatically when it starts.
 
----
+### View logs
 
-## 📡 API Reference
+```powershell
+docker compose logs -f coordinator
+docker compose logs -f dashboard
+```
+
+### Stop or reset the cluster
+
+Stop the containers while keeping database and shard volumes:
+
+```powershell
+docker compose down
+```
+
+Delete the containers and all stored data:
+
+```powershell
+docker compose down -v
+```
+
+Do not use `-v` unless you intentionally want to delete uploaded files and metadata.
+
+## Deploy on a VPS
+
+The existing Compose setup is best suited to a Linux VPS because all services share one private Docker network and the storage-node hostnames already match the seeded database addresses.
+
+Recommended starting size:
+
+- Ubuntu 22.04 or 24.04
+- 2 vCPUs
+- 4 GB RAM
+- At least 50 GB of persistent disk, depending on file volume
+
+Install Docker and Git on the server, then run:
+
+```bash
+git clone https://github.com/abhinavtiwari77/DistFS.git
+cd DistFS
+docker compose up --build -d
+docker compose ps
+```
+
+For a temporary private deployment, open only the dashboard port and API port:
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 5173/tcp
+sudo ufw allow 8080/tcp
+sudo ufw enable
+```
+
+Do not expose PostgreSQL (`5432`) or the storage-node gRPC ports (`50051`-`50054`) to the public internet. For a public deployment, put Nginx or Caddy in front of the dashboard, configure HTTPS, and proxy API requests to the coordinator.
+
+### Update a VPS deployment
+
+Push changes from your development computer:
+
+```powershell
+git add .
+git commit -m "Describe the change"
+git push origin main
+```
+
+Pull and rebuild on the VPS:
+
+```bash
+cd /path/to/DistFS
+git pull --rebase origin main
+docker compose up --build -d
+```
+
+Docker volumes preserve PostgreSQL data and storage-node shards while images are rebuilt.
+
+## Configuration
+
+The Compose file supplies the service environment variables. Important settings include:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `POSTGRES_HOST` | PostgreSQL service hostname | `postgres` |
+| `POSTGRES_PORT` | PostgreSQL port | `5432` |
+| `POSTGRES_USER` | Database user | `distfs` |
+| `POSTGRES_PASSWORD` | Database password | `distfs_secret` |
+| `POSTGRES_DB` | Database name | `distfs` |
+| `COORDINATOR_PORT` | REST API port | `8080` |
+| `CHUNK_SIZE` | Chunk size in bytes | `4194304` |
+| `DATA_SHARDS` | Data shards per chunk | `3` |
+| `PARITY_SHARDS` | Parity shards per chunk | `1` |
+
+Change the demo database password before exposing the system publicly. Store production secrets outside Git and inject them through the server environment or your deployment platform.
+
+## API Reference
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/files/upload` | Upload a file (`multipart/form-data`) |
-| `GET` | `/api/files` | List all files in the cluster |
-| `GET` | `/api/files/:id` | Get metadata and shard placement for a file |
+| `POST` | `/api/files/upload` | Upload a file as multipart form data |
+| `GET` | `/api/files` | List files |
+| `GET` | `/api/files/:id` | Get file metadata and shard placement |
 | `GET` | `/api/files/:id/download` | Download or reconstruct a file |
-| `DELETE` | `/api/files/:id` | Delete a file and its shards across all nodes |
-| `GET` | `/api/nodes` | List all 4 storage nodes and their statuses |
-| `GET` | `/api/nodes/:id` | Get status and storage metrics for a node |
-| `POST` | `/api/nodes/:id/stop` | Simulate node failure (set to `OFFLINE`) |
-| `POST` | `/api/nodes/:id/start` | Restore node to `ONLINE` |
-| `GET` | `/api/stats` | Cluster storage and file metrics |
-| `GET` | `/api/health` | Coordinator health check |
+| `DELETE` | `/api/files/:id` | Delete a file and its shards |
+| `GET` | `/api/nodes` | List storage nodes and status |
+| `GET` | `/api/nodes/:id` | Get node details and storage metrics |
+| `POST` | `/api/nodes/:id/stop` | Mark a node offline for simulation |
+| `POST` | `/api/nodes/:id/start` | Restore a simulated node |
+| `GET` | `/api/stats` | Get cluster statistics |
+| `GET` | `/api/health` | Check coordinator health |
 
----
+## Failure Simulation
 
-## 🧪 Testing
+The dashboard can stop and start nodes for testing:
 
-### Automated Test Suite
+1. Upload a file while all four nodes are online.
+2. Stop one node and download the file. The coordinator reconstructs the missing shard.
+3. Stop a second node and download again. The coordinator rejects the request with HTTP 503 because there are not enough shards.
+4. Start the stopped nodes again.
 
-#### On Linux / macOS (Bash):
+## Testing
+
+Windows PowerShell:
+
+```powershell
+.\test\test_cluster.ps1
+```
+
+Linux or macOS:
+
 ```bash
 chmod +x test/integration_test.sh
 ./test/integration_test.sh
 ```
 
-#### On Windows (PowerShell):
-```powershell
-.\test\test_cluster.ps1
+The tests cover health checks, upload, direct download, one-node reconstruction, two-node failure handling, node restoration, and deletion.
+
+## Repository Structure
+
+```text
+DistFS/
+├── coordinator/                 # Go REST coordinator
+├── storage-node/                # Go gRPC storage service
+├── proto/                       # Protocol Buffer definition and generated code
+├── dashboard/                   # React and Vite dashboard
+├── migrations/                  # PostgreSQL schema and seed data
+├── test/                        # Integration tests
+├── docker-compose.yml           # Seven-service local/VPS deployment
+├── Dockerfile.coordinator
+├── Dockerfile.storage-node
+├── Dockerfile.dashboard
+└── README.md
 ```
 
-Both test suites perform automated verification of:
-1. Health check & 4-node cluster discovery
-2. File upload with chunking & Reed-Solomon distribution
-3. Direct download & SHA-256 verification (all nodes online)
-4. Simulated node failure (`node-2` stopped)
-5. Reconstructed download & SHA-256 verification (1 node offline)
-6. Multiple node failure handling (2 nodes offline -> HTTP 503 failsafe)
-7. Node restoration to online status
-8. Complete file deletion across all storage nodes and database
+## Production Notes
 
----
-
-## 📁 Repository Structure
-
-```
-Dist_File_Storeage/
-├── coordinator/                 # Go Coordinator service
-│   ├── cmd/server/main.go       # Entry point
-│   ├── internal/
-│   │   ├── api/                 # REST handlers & Gin router
-│   │   ├── checksum/            # SHA-256 verification utilities
-│   │   ├── chunker/             # File splitting and chunk merging
-│   │   ├── db/                  # PostgreSQL connection & SQL queries
-│   │   ├── erasure/             # Reed-Solomon encoding & decoding
-│   │   ├── models/              # Data structures & JSON models
-│   │   ├── nodemanager/         # Node tracking & simulation logic
-│   │   ├── reconstruction/      # Download reconstruction & integrity validation
-│   │   └── shardmanager/        # gRPC client to storage nodes
-│   ├── go.mod
-│   └── go.sum
-├── storage-node/                # Go Storage Node service
-│   ├── cmd/node/main.go         # Node entry point
-│   ├── internal/
-│   │   ├── server/              # gRPC server implementation
-│   │   └── store/               # Atomic local disk read/write
-│   ├── go.mod
-│   └── go.sum
-├── proto/                       # Shared Protocol Buffer definitions
-│   ├── storage.proto            # gRPC service definition
-│   ├── go.mod
-│   └── gen/storagepb/           # Generated Go protobuf & gRPC stubs
-├── dashboard/                   # React 18 + Vite + Tailwind frontend
-│   ├── src/
-│   │   ├── components/          # NodePanel, NodeCard, FileUpload, FileList, Layout
-│   │   ├── services/            # Axios API client
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
-├── migrations/                  # PostgreSQL DDL migrations
-│   ├── 001_create_nodes.sql
-│   ├── 002_create_files.sql
-│   ├── 003_create_chunks.sql
-│   └── 004_create_shards.sql
-├── test/                        # Integration test scripts
-│   ├── integration_test.sh      # Bash test suite
-│   └── test_cluster.ps1         # PowerShell test suite
-├── docker-compose.yml           # Complete 7-container cluster orchestration
-├── Dockerfile.coordinator       # Coordinator multi-stage Docker build
-├── Dockerfile.storage-node      # Storage node multi-stage Docker build
-├── Dockerfile.dashboard         # Dashboard Vite production/dev container
-├── .env                         # Cluster environment configuration
-└── README.md                    # Project documentation
-```
+This project is currently a demonstration and simulation cluster. Before production use, add authentication, HTTPS, backups for PostgreSQL and all shard volumes, monitoring, resource limits, and a production frontend server. Render is not a direct drop-in for this Compose file because it requires separate services and different private hostnames for the storage nodes.
